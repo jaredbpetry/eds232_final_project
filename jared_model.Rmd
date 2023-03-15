@@ -1,0 +1,73 @@
+---
+title: "jared_model"
+author: "Jared Petry"
+date: "2023-03-15"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+For this quarter's final lab, you will be using the knowledge of machine learning that you have gained this quarter to training models to predict dissolved inorganic carbon in water samples collected by the California Cooperative Oceanic Fisheries Investigations program (CalCOFI).
+
+## Your Task:
+- Acquire domain knowledge. (Dr. Satterthwaite's presentation)
+- Explore the data.
+- Preprocessing.
+- Choose a model algorithm.
+- Tune relevant parameters (Cross validation).
+- Submit your prediction.
+
+```{r include=FALSE}
+library(caret) 
+library(tidymodels) 
+library(tidyverse)
+library(dplyr) 
+library(gbm)
+library(xgboost)
+library(ggpubr)
+library(tictoc)
+library(vip)
+```
+
+
+## Read in the data: 
+
+This dataset was downloaded from the CalCOFI data portal. Bottle and cast data was downloaded and merged, then relevant variables were selected.
+
+You will use the data contained in the train.csv file to train a model that will predict dissolved inorganic carbon (DIC) content in the water samples.
+
+```{r}
+dic_train <- read_csv("train.csv") |> select(-...13) # take out blank column
+dic_test <- read_csv("test.csv")
+```
+
+Here's a short description of each variables: 
+
+NO2uM - Micromoles Nitrite per liter of seawater
+NO3uM - Micromoles Nitrate per liter of seawater
+NH3uM - Micromoles Ammonia per liter of seawater
+R_TEMP - Reported (Potential) Temperature in degrees Celsius
+R_Depth - Reported Depth (from pressure) in meters
+R_Sal - Reported Salinity (from Specific Volume Anomoly, M³/Kg)
+R_DYNHT - Reported Dynamic Height in units of dynamic meters (work per unit mass)
+R_Nuts - Reported Ammonium concentration
+R_Oxy_micromol.Kg - Reported Oxygen micromoles/kilogram
+PO4uM - Micromoles Phosphate per liter of seawater
+SiO3uM - Micromoles Silicate per liter of seawater
+TA1.x - Total Alkalinity micromoles per kilogram solution
+Salinity1 - Salinity
+Temperature_degC - Temp
+DIC - Outcome
+
+**Heads up: one variable is differing in the train set: TA1.x in train set and TA1 in test set... Also column 13 is blank so I am removing it from the start
+
+
+
+
+
+
+
+
+
