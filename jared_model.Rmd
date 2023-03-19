@@ -29,6 +29,7 @@ library(xgboost)
 library(ggpubr)
 library(tictoc)
 library(vip)
+library(Hmisc)
 ```
 
 
@@ -63,9 +64,77 @@ DIC - Outcome
 
 **Heads up: one variable is differing in the train set: TA1.x in train set and TA1 in test set... Also column 13 is blank so I am removing it from the start
 
+### Data exploration: 
+
+```{r}
+# let's see which variables are most correlated with variable DIC 
+
+cor_w_dic <- function(var) {
+  cor <- cor(dic_train$DIC, dic_train$var)
+  print(paste("the correlation between", var, "and dissolved inorganic carbon is:", cor))
+}
+
+# test the function with one variable
+cor_w_dic(Lat_Dec)
+
+corr <- rcorr(as.matrix(dic_train))
+corr$r
+
+```
+As we can see from this correlation matrix, the variables that are highly correlated with DIC are: 
+- NO3uM
+- R_TEMP
+- R_Depth
+- R_Sal
+- R_DYNHT
+- R_Oxy_micromol.Kg 
+- PO4uM 
+- SiO3uM 
+- TA1.x 
+- Salinity1
+
+Variables that are NOT highly correlated with DIC: 
+- id 
+- Lat_Dec 
+- Lon_Dec 
+- NO2uM
+- NH3uM
+- R_Nuts
+
+Create some cross validation folds for the training data: 
+```{r}
+folds <- vfold_cv(data = dic_train, 
+                  v = 10,
+                  strata = DIC)
+```
 
 
+## Pick a model: 
 
+Here are the types of models that we have worked with in this class: 
+linear regression 
+- lab 1: used to predict the price of a pumpkin (linear_reg() function)
+regularized multivariate polynomial regression 
+- used the same as above with step_poly and poly_spec?? I am confused how different this would be or if this would be possible with many variables
+classification and logistic regression 
+- not applicable here because we are predicting a continuous variable
+k nearest neighbors 
+- could be a good option?
+
+decision tree 
+bagged forest
+random forest 
+boosted trees
+
+We are not doing classification, we are trying to predict an actual number for DIC, so 
+
+### Let's try a K-nearest neighbor model 
+
+Create a recipe 
+```{r}
+dic_recipe <- recipe(DIC ~ ., data = dic_train)
+# potentially add some pre-processing steps??
+```
 
 
 
