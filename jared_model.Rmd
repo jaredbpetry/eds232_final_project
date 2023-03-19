@@ -68,15 +68,6 @@ DIC - Outcome
 
 ```{r}
 # let's see which variables are most correlated with variable DIC 
-
-cor_w_dic <- function(var) {
-  cor <- cor(dic_train$DIC, dic_train$var)
-  print(paste("the correlation between", var, "and dissolved inorganic carbon is:", cor))
-}
-
-# test the function with one variable
-cor_w_dic(Lat_Dec)
-
 corr <- rcorr(as.matrix(dic_train))
 corr$r
 
@@ -101,12 +92,6 @@ Variables that are NOT highly correlated with DIC:
 - NH3uM
 - R_Nuts
 
-Create some cross validation folds for the training data: 
-```{r}
-folds <- vfold_cv(data = dic_train, 
-                  v = 10,
-                  strata = DIC)
-```
 
 
 ## Pick a model: 
@@ -130,10 +115,62 @@ We are not doing classification, we are trying to predict an actual number for D
 
 ### Let's try a K-nearest neighbor model 
 
-Create a recipe 
 ```{r}
-dic_recipe <- recipe(DIC ~ ., data = dic_train)
-# potentially add some pre-processing steps??
+# split the training data 
+
+# create a recipe
+dic_recipe <- recipe(DIC ~ ., data = dic_train) |> 
+  step_normalize(all_numeric(), -all_outcomes()) |> 
+  prep() 
+# potentially add some pre-processing steps?? all the data are already numeric
+# I think the knn model like normalized data
+
+# bake the recipe
+baked_dic <- bake(dic_recipe, dic_train)
+
+knn_spec_tune <- nearest_neighbor(neighbors = tune()) |> 
+  set_engine("kknn") |> 
+  set_mode("regression")
+knn_spec_tune
+
+# create cross validation folds 
+set.seed(1738)
+folds <- vfold_cv(data = dic_train, 
+                  v = 10,
+                  strata = DIC)
+
+# build a workflow
+knn_workflow <- workflow() |> 
+  add_model(knn_spec_tune) |> 
+  add_recipe(dic_recipe) 
+
+# now fit the resamples
+set.seed(345)
+fit_knn_cv <- knn_workflow |> 
+  tune_grid(
+    folds,
+    grid = data.frame(neighbors = c(1, 5, 10, seq(20, 100, 10))) # this will make it try running on all different folds, for example we are keeping it                                             simple for run time. sample different from 1-100
+  )
+
+# Check the performance with collect_metrics()
+fit_knn_cv %>% collect_metrics()
+
+# show the best number of neighborsfor fitting to our cv folds
+show_best(fit_knn_cv)
+# ---- looks like 10 neighbors is best!
+
+# now we can finalize our workflow
+final_wf <- 
+  knn_workflow |> 
+  finalize_workflow(select_best(fit_knn_cv))
+final_wf
+
+# make a final fit 
+final_fit <- final_wf |> last_fit(dic_test)
+# finally, make predictions on the test data  
+dic_pred_on_test <- predict(k_10_mod, dic_test)
+
+# welp, this code doesn't run but I'm getting like over 10 RMSE and that's not very good so I don't think KNN is the way to go since there's not anything left for me to tune other than K
 ```
 
 
