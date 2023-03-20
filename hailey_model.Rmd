@@ -286,7 +286,7 @@ train_fit
 ```{r}
 set.seed(31923)
 # First, load and prep the new data
-new_data <- read_csv("test.csv") #%>% mutate(DIC = NA)
+new_data <- read_csv("test.csv") %>% mutate(DIC = as.numeric(NA))
 
 rec_new <- recipe(DIC ~ ., data = new_data) %>% 
   step_dummy(all_nominal(), -all_outcomes(), one_hot = TRUE) %>% 
