@@ -16,7 +16,7 @@ library(tidymodels)
 library(xgboost)
 library(tictoc)
 library(vip)
-library(Ckmeans.1d.dp)
+#library(Ckmeans.1d.dp)
 ```
 
 ```{r}
@@ -31,6 +31,7 @@ Predict Dissolved Inorganic Carbon (DIC) in water samples.
 Divide the training data (train.csv), apply a preprocessing recipe, and then take resamples.
 
 ```{r}
+set.seed(31923)
 # Make and apply a recipe
 data <- recipe(DIC ~ ., data = train_data) %>% 
   step_dummy(all_nominal(), -all_outcomes(), one_hot = TRUE) %>% 
@@ -48,6 +49,7 @@ test_extra <- testing(split)
 ```
 
 ```{r}
+set.seed(31923)
 # And take CV resamples
 train_cv <- data %>% vfold_cv(v = 10)
 train_cv_extra <- train_extra %>% vfold_cv(v = 10)
@@ -57,6 +59,7 @@ train_cv_extra <- train_extra %>% vfold_cv(v = 10)
 ### First model, Tune the learning rate
 
 ```{r}
+set.seed(31923)
 xgboost <- boost_tree(
     mode = "regression",
     trees = 1000,
@@ -72,6 +75,7 @@ xgboost <- boost_tree(
 ```
 
 ```{r}
+set.seed(31923)
 doParallel::registerDoParallel()
 tic()
 # Create a grid to tune the learn_rate first:
@@ -95,6 +99,7 @@ select_best(learn_rt_tune1)
 ### Tune the tree parameters
 
 ```{r}
+set.seed(31923)
 # Next tune the tree parameters:
 xgboost2 <- boost_tree(
     mode = "regression",
@@ -111,17 +116,28 @@ xgboost2 <- boost_tree(
 ```
 
 ```{r}
+# Set the parameters:
+tree_params <- parameters(min_n(), tree_depth(), loss_reduction())
+
+# Set the workflow
+tree_wf <- workflow() %>%
+  add_model(xgboost2) %>% 
+  add_formula(DIC ~ .)
+```
+
+
+```{r}
+set.seed(31923)
 doParallel::registerDoParallel()
 tic()
 # Create a grid to tune the tree parameters too:
-tree_param_grid <- grid_max_entropy(min_n(), tree_depth(), loss_reduction(), 
-                                    iter = 500, size = 60)
+tree_param_grid <- grid_max_entropy(tree_params, iter = 500, size = 60)
 
-tree_param_tune <- tune_grid(xgboost2, 
-                     DIC ~ ., 
+tree_param_tune <- tune_grid(object = tree_wf, 
                      resamples = train_cv, 
                      grid = tree_param_grid,
-                     metrics = metric_set(rmse))
+                     metrics = metric_set(rmse),
+                     control = control_grid(verbose = TRUE))
 toc()
 ```
 
@@ -129,19 +145,21 @@ toc()
 # Use autoplot
 autoplot(tree_param_tune) + theme_light()
 show_best(tree_param_tune)
-select_best(tree_param_tune)
+best_tree <- select_best(tree_param_tune)
 ```
 
 ### Stocastic Parameter tuning
 
 ```{r}
+set.seed(31923)
+
 xgboost3 <- boost_tree(
     mode = "regression",
     trees = 1000,
-    min_n = 8, # 5 for the split train.csv data
-    tree_depth = 7, # 12 for the split train.csv data
+    min_n = best_tree$min_n,
+    tree_depth = best_tree$tree_depth,
     learn_rate = select_best(learn_rt_tune1),
-    loss_reduction = 9.08, # 0.0000112 for the split train.csv data
+    loss_reduction = best_tree$loss_reduction, 
     mtry = tune(),
     sample_size = tune(),
     stop_iter = 5
@@ -160,6 +178,7 @@ stochastic_wf <- workflow() %>%
 ```
 
 ```{r}
+set.seed(31923)
 doParallel::registerDoParallel()
 tic()
 # Create a grid to tune the tree parameters too:
@@ -177,28 +196,30 @@ toc()
 # Use autoplot
 autoplot(stochastic_tune) + theme_light()
 show_best(stochastic_tune)
-select_best(stochastic_tune)
+best_sto <- select_best(stochastic_tune)
 ```
 
 ### Final model
 
 ```{r}
+set.seed(31923)
 # Retune the learning rate
 xgboost4 <- boost_tree(
     mode = "regression",
     trees = 1000,
-    min_n = 8, # 5 for the split train.csv data
-    tree_depth = 7, # 12 for the split train.csv data
+    min_n = best_tree$min_n,
+    tree_depth = best_tree$tree_depth,
     learn_rate = tune(),
-    loss_reduction = 9.08, # 0.0000112 for the split train.csv data 
-    mtry = 5, # 4 for the split train.csv data
-    sample_size = 0.621, # 0.743 for the split train.csv data
+    loss_reduction = best_tree$loss_reduction,
+    mtry = best_sto$mtry, 
+    sample_size = best_sto$sample_size,
     stop_iter = 5
     ) %>%
     set_engine("xgboost")
 ```
 
 ```{r}
+set.seed(31923)
 # Retune the learn_rate for the final model
 doParallel::registerDoParallel()
 tic()
@@ -221,6 +242,7 @@ select_best(learn_rt_tune2)
 ```
 
 ```{r}
+set.seed(31923)
 # Finalize the model
 xgb_final <- finalize_model(xgboost4, select_best(learn_rt_tune2))
 
@@ -234,33 +256,37 @@ final_wf <- workflow() %>%
   add_recipe(recipe = recipe)
 ```
 
-
 ```{r}
+set.seed(31923)
 # Make a final fit of the model with the data
 train_fit <- xgb_final %>% fit(DIC ~ ., data = data)
 train_fit
 ```
 
 ```{r}
-train_test_fit <- xgb_final %>% fit(DIC ~ ., data = test_extra)
-train_test_fit
+#train_test_fit <- xgb_final %>% fit(DIC ~ ., data = test_extra)
+#train_test_fit
 ```
 
 
 ```{r}
+#set.seed(31923)
 # I can also get predictions for the testing data to better see how the model evaluates.
-test_pred <- train_fit %>% predict(new_data = test_extra)
-test_prob <- train_fit %>% 
-  predict_numeric.model_fit(new_data = test_extra)
-proc_mw <- bind_cols(test_extra, test_pred, test_prob)
+#test_pred <- train_fit %>% predict(new_data = test_extra)
+#test_prob <- train_fit %>% 
+#  predict_numeric.model_fit(new_data = test_extra)
+#proc_mw <- bind_cols(test_extra, test_pred, test_prob)
 
 # check the best iteration
-proc_mw %>% metrics(`...20`, truth = DIC, estimate = .pred)
+#proc_mw %>% metrics(`...20`, truth = DIC, estimate = .pred)
 ```
 
+## Predict on New Data (test.csv)
+
 ```{r}
+set.seed(31923)
 # First, load and prep the new data
-new_data <- read_csv("test.csv") %>% mutate(DIC = NA)
+new_data <- read_csv("test.csv") #%>% mutate(DIC = NA)
 
 rec_new <- recipe(DIC ~ ., data = new_data) %>% 
   step_dummy(all_nominal(), -all_outcomes(), one_hot = TRUE) %>% 
