@@ -30,6 +30,8 @@ library(ggpubr)
 library(tictoc)
 library(vip)
 library(Hmisc)
+library(censored)
+library(pec)
 ```
 
 
@@ -73,16 +75,17 @@ corr$r
 
 ```
 As we can see from this correlation matrix, the variables that are highly correlated with DIC are: 
-- NO3uM
-- R_TEMP
-- R_Depth
-- R_Sal
-- R_DYNHT
-- R_Oxy_micromol.Kg 
-- PO4uM 
-- SiO3uM 
-- TA1.x 
-- Salinity1
+- NO3uM 0.97985048
+- R_TEMP -0.936951708
+- R_Depth 0.55575020
+- R_Sal -0.963750900
+- R_DYNHT 0.79719608
+- R_Oxy_micromol.Kg   -0.97886763 
+- PO4uM 0.994955284
+- SiO3uM 0.90876340
+- TA1.x 0.852645604    
+- Salinity1 0.940914237
+- Temperature_degC -0.936781353
 
 Variables that are NOT highly correlated with DIC: 
 - id 
@@ -114,13 +117,21 @@ boosted trees
 We are not doing classification, we are trying to predict an actual number for DIC, so 
 
 ### Let's try a K-nearest neighbor model 
-
+- NO3uM 0.97985048
+- R_TEMP 
+- R_Depth 
+- R_Sal 
+- R_DYNHT 
+- R_Oxy_micromol.Kg   -0.97886763 
+- PO4uM 0.994955284
+- SiO3uM 
+- TA1.x     
+- Salinity1 
+- Temperature_degC 
 ```{r}
-# split the training data 
-
-# create a recipe
-dic_recipe <- recipe(DIC ~ ., data = dic_train) |> 
-  step_normalize(all_numeric(), -all_outcomes()) |> 
+# create a recipe (this time only using select variables! the ones that are highly correlated with DIC)
+dic_recipe <- recipe(DIC ~ NO3uM + R_Oxy_micromol.Kg + PO4uM, data = dic_train) |> 
+  step_normalize(all_numeric(), -all_outcomes()) |>  # I took this step out and results were unhanged... maybe take out? 
   prep() 
 # potentially add some pre-processing steps?? all the data are already numeric
 # I think the knn model like normalized data
@@ -172,6 +183,128 @@ dic_pred_on_test <- predict(k_10_mod, dic_test)
 
 # welp, this code doesn't run but I'm getting like over 10 RMSE and that's not very good so I don't think KNN is the way to go since there's not anything left for me to tune other than K
 ```
+Using all variables, the RMSE was over 10 
+Using these variables (those correlated over 50 percent, top ten or so), the RMSE was 6.240940
+Using these variables (those correlated over 90 percent, top 8), the RMSE was 6.131425
+Using top 7 variables the RMSE was 6.165918	
+using top 6 6.052055 (NO3uM, R_TEMP, R_Sal, R_Oxy_micromol.Kg, PO4uM, Salinity1)
+using top 5 5.920321 (NO3uM, R_Sal, R_Oxy_micromol.Kg, PO4uM, Salinity1)
+using top 4 6.025363	
+using top 3 not sick
+
+NO3uM 0.97985048
+- R_TEMP 
+- R_Depth 
+- R_Sal 
+- R_DYNHT 
+- R_Oxy_micromol.Kg   -0.97886763 
+- PO4uM 0.994955284
+- SiO3uM 
+- TA1.x     
+- Salinity1 0.940914237
+- Temperature_degC 
+
+
+### Let's try a simple decision tree: 
+
+```{r}
+# create model specification 
+tree_spec_tune <- decision_tree(
+  cost_complexity = tune(), 
+  tree_depth = tune(), 
+  min_n = tune()
+) |> 
+  set_engine("rpart") |> 
+  set_mode("regression") # later on, try "censored regression"
+
+# create a recipe
+tree_recipe <- recipe(DIC ~ NO3uM + R_TEMP + R_Sal + R_Oxy_micromol.Kg + PO4uM + Salinity1, 
+                      data = dic_train) |> 
+  step_normalize(all_numeric(), -all_outcomes()) |>  # I took this step out and results were unhanged... maybe take out? 
+  prep() 
+
+# create a tuning grid for our hyperparameters
+tree_grid <- grid_regular(cost_complexity(), tree_depth(), min_n(), levels = 10) # how many levels will the tune try
+tree_grid
+
+# create a workflow
+wf_tree_tune <- workflow() |> 
+  add_recipe(tree_recipe) |> 
+  add_model(tree_spec_tune)
+
+#set up k-fold cv. This can be used for all the algorithms
+set.seed(1738)
+tree_folds = dic_train |> 
+  vfold_cv(v = 10)
+tree_folds
+
+# have the cores run in parallel so it doesn't take as long to run
+doParallel::registerDoParallel() #build trees in parallel
+tree_rs <- tune_grid(
+  tree_spec_tune, # model specification
+  DIC ~ NO3uM + R_TEMP + R_Sal + R_Oxy_micromol.Kg + PO4uM + Salinity1,  # features to use
+  resamples = tree_folds, # put the resamples that we created above 
+  grid = tree_grid, # which grid
+  metrics = metric_set(rmse)  # which combination is the best 
+)
+tree_rs
+
+autoplot(tree_rs) + theme_light()
+
+# is you want to actually see the best values for accuracy
+show_best(tree_rs) 
+
+# note: using the censored regression option in the recipe caused all models to fail.. maybe look into this later
+
+```
+
+### Let's try a boosted tree model: 
+```{r}
+# bagged decision tree recipe: 
+bag_tree_recipe <- recipe(DIC ~ NO3uM + R_TEMP + R_Sal + R_Oxy_micromol.Kg + PO4uM + Salinity1, 
+                      data = dic_train) |> 
+  step_normalize(all_numeric(), -all_outcomes()) |>  # I took this step out and results were unhanged... maybe take out? 
+  prep() 
+
+# create model specification 
+bag_tree_spec_tune <- bag_tree(
+  cost_complexity = tune(), 
+  tree_depth = tune(), 
+  min_n = tune()) |> 
+  set_engine("rpart", times = 1000) |> 
+  set_mode("censored regression")
+  
+
+set.seed(1738)
+bag_tree_grid <- grid_regular(cost_complexity(), tree_depth(), min_n(), levels = 10) # how many levels will the tune try
+
+bag_tree_grid
+
+# bundle into workflow 
+wf_bag_tree_tune <- workflow() |> 
+  add_recipe(bag_tree_recipe) |> 
+  add_model(bag_tree_spec_tune)
+
+# determine best combination of tuned hyperparamters
+doParallel::registerDoParallel() #build trees in parallel
+#200s
+bag_tree_rs <- tune_grid(
+  wf_bag_tree_tune, # model specification
+  DIC ~ NO3uM + R_TEMP + R_Sal + R_Oxy_micromol.Kg + PO4uM + Salinity1,  # features to use
+  resamples = song_cv, # put the resamples that we created above 
+  grid = tree_grid, # which grid
+  metrics = metric_set(rmse)  # which combination is the best 
+)
+
+bag_tree_rs
+show_best(bag_tree_rs) 
+```
+
+Notes: what is censored regression.. why did it cause the models to fail in the decision tree model...
+- should I use 'bake()'? or just prep() like I have been ... when and why would i use those and would it just influence something about functions within the model or actual performance of the model?
+- I forgot to specify features to use in the decision tree maybe this has something to do with it
+
+
 
 
 
