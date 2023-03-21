@@ -303,8 +303,8 @@ test_eval_prob <- train_fit %>%
   predict_numeric.model_fit(new_data = new_data)
 
 proc_mw2 <- bind_cols(new_data, test_eval_fit, test_eval_prob) %>% 
-  rename(test.id = id) %>% rename(DIC = .pred) %>%
-  select(test.id, DIC)
+  rename(DIC = .pred) %>%
+  select(id, DIC)
 
 # check the best iteration
 #proc_mw2 %>% metrics(`...19`, estimate = .pred)
