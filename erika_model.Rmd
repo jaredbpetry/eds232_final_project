@@ -74,9 +74,6 @@ DIC - Outcome
 dic_rec <- recipe(DIC ~ ., data = dic_train) %>%
   step_normalize(all_numeric(), -all_outcomes())
 
-dic_rec_alt <- recipe(DIC ~ ., data = split_train) %>%
-  step_normalize(all_numeric(), -all_outcomes())
-
 # Set up cv folds
 set.seed(123)
 cv_folds <- dic_train %>% vfold_cv(v = 10)
