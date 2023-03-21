@@ -39,6 +39,7 @@ This dataset was downloaded from the CalCOFI data portal. Bottle and cast data w
 
 You will use the data contained in the train.csv file to train a model that will predict dissolved inorganic carbon (DIC) content in the water samples.
 
+#### RUN THE BELOW
 ```{r}
 dic_train <- read_csv("train.csv") %>% 
   select(-...13) %>% # remove column with all NAs
@@ -80,9 +81,11 @@ dic_rec_alt <- recipe(DIC ~ ., data = split_train) %>%
 set.seed(123)
 cv_folds <- dic_train %>% vfold_cv(v = 10)
 ```
+#### RUN ALL THE ABOVE
+
 
 # BOOSTED TREES
-
+# CAN SKIP THE BELOW UNTIL INDICATED TO NOT - WAS USED FOR TUNING
 ```{r}
 # Create model specification
 boost_spec_tune_1 <- boost_tree(
@@ -248,7 +251,9 @@ boost_rs_df_3
 
 # 5.426082, mtry 7, sample size 0.5081524
 ```
+# CAN SKIP THE ABOVE - WAS FOR TUNING
 
+# BELOW THIS IS ABSOLUTELY NECESSARY TO RUN
 ```{r}
 # Create model specification
 boost_spec_tune_4 <- boost_tree(
