@@ -20,6 +20,7 @@ For this quarter's final lab, you will be using the knowledge of machine learnin
 - Submit your prediction.
 
 ```{r include=FALSE}
+# Load packages
 library(caret) 
 library(tidymodels) 
 library(tidyverse)
@@ -75,184 +76,183 @@ dic_rec <- recipe(DIC ~ ., data = dic_train) %>%
   step_normalize(all_numeric(), -all_outcomes())
 
 # Set up cv folds
-set.seed(123)
+set.seed(123) # for reproducibility
 cv_folds <- dic_train %>% vfold_cv(v = 10)
 ```
 #### RUN ALL THE ABOVE
 
 
 # BOOSTED TREES
-# CAN SKIP THE BELOW UNTIL INDICATED TO NOT - WAS USED FOR TUNING
+# CAN SKIP THE BELOW UNTIL INDICATED TO NOT SKIP - WAS USED FOR TUNING
 ```{r}
-# Create model specification
-boost_spec_tune_1 <- boost_tree(
-  trees = 3000, # ok to fix
-  #tree_depth = tune(), min_n = tune(), loss_reduction = tune(), # tree params 
-  #sample_size = tune(), mtry = tune(), # stochastic params 
-  learn_rate = tune() # learning rate param
-  ) %>% 
-  set_engine("xgboost") %>%
-  set_mode("regression") 
+# # Create model specification for tuning the learn rate
+# boost_spec_tune_1 <- boost_tree(
+#   trees = 3000, # ok to fix
+#   #tree_depth = tune(), min_n = tune(), loss_reduction = tune(), # tree params 
+#   #sample_size = tune(), mtry = tune(), # stochastic params 
+#   learn_rate = tune() # learning rate param
+#   ) %>% 
+#   set_engine("xgboost") %>%
+#   set_mode("regression") 
+# 
+# 
+# # Create tune grid
+# boost_grid_1 <- expand.grid(learn_rate = seq(0.0001, 0.3, length.out = 30))
+# 
+# # Create workflow
+# wf_boost_tune_1 <- workflow() %>%
+#   add_recipe(dic_rec) %>% # will automatically prep and bake
+#   add_model(boost_spec_tune_1) 
+# 
+# # Run the model
+# set.seed(123) # for reproducibility
+# doParallel::registerDoParallel()
+# tic("model run")
+# print("starting model tune 1...")
+# boost_rs_1 <- tune_grid(
+# wf_boost_tune_1,
+# DIC~., 
+# resamples = cv_folds,
+# grid = boost_grid_1,
+# metrics = metric_set(rmse)
+# )
+# 
+# print("...completing model tune 1")
+# toc()
+# 
+# # Collect metrics
+# boost_rs_df_1 <- boost_rs_1 %>%
+#   collect_metrics() %>%
+#   as.data.frame() %>%
+#   mutate(mean = as.numeric(mean)) %>%
+#   slice_min(mean, n = 5)
+# boost_rs_df_1
 
-
-# Create tune grid
-boost_grid_1 <- expand.grid(learn_rate = seq(0.0001, 0.3, length.out = 30))
-
-# Create workflow
-wf_boost_tune_1 <- workflow() %>%
-  add_recipe(dic_rec) %>% # will automatically prep and bake
-  add_model(boost_spec_tune_1) 
-
-# Run the model
-set.seed(123) # for reproducibility
-doParallel::registerDoParallel()
-tic("model run")
-print("starting model tune 1...")
-boost_rs_1 <- tune_grid(
-wf_boost_tune_1,
-DIC~., 
-resamples = cv_folds,
-grid = boost_grid_1,
-metrics = metric_set(rmse)
-)
-
-print("...completing model tune 1")
-toc()
-
-# Collect metrics
-boost_rs_df_1 <- boost_rs_1 %>%
-  collect_metrics() %>%
-  as.data.frame() %>%
-  mutate(mean = as.numeric(mean)) %>%
-  slice_min(mean, n = 5)
-boost_rs_df_1
-```
-```{r}
-# Create model specification
-boost_spec_tune_2 <- boost_tree(
-  trees = 3000, # ok to fix
-  tree_depth = tune(), 
-  min_n = tune(), 
-  loss_reduction = tune(), # tree params 
-  #sample_size = tune(), mtry = tune(), # stochastic params 
-  learn_rate = 0.02078276 # learning rate param
-  ) %>% 
-  set_engine("xgboost") %>%
-  set_mode("regression") 
-
-
-# Grid specification
-params_for_grid_2 <-
-  dials::parameters(
-    min_n(),
-    tree_depth(),
-    loss_reduction()
-) 
-# Create grid
-set.seed(123) # for reproducibility 
-boost_grid_2 <- dials::grid_max_entropy(params_for_grid_2,
-                        size = 100 # test 100 combinations 
-) 
-
-# Create workflow
-wf_boost_tune_2 <- workflow() %>%
-  add_recipe(dic_rec) %>% # will automatically prep and bake
-  add_model(boost_spec_tune_2) 
-
-# Run the model
-set.seed(123) # for reproducibility
-doParallel::registerDoParallel()
-tic("model run")
-print("starting model tune 2...")
-boost_rs_2 <- tune_grid(
-wf_boost_tune_2,
-DIC~., 
-resamples = cv_folds,
-grid = boost_grid_2,
-metrics = metric_set(rmse)
-)
-
-print("...completing model tune 2")
-toc()
-
-#saveRDS(boost_rs_2, "boost_tree_specs.RDS")
-
-# Collect metrics
-boost_rs_df_2 <- boost_rs_2 %>%
-  collect_metrics() %>%
-  as.data.frame() %>%
-  mutate(mean = as.numeric(mean)) %>%
-  slice_min(mean, n = 5)
-boost_rs_df_2
-
-# 3 = min_n, 5 = tree_depth, 1.672370e-04 = loss_reduction
+# # 0.02078276 = learn rate
 ```
 
 ```{r}
-# Create model specification
-boost_spec_tune_3 <- boost_tree(
-  trees = 3000, # ok to fix
-  tree_depth = 5, 
-  min_n = 3, 
-  loss_reduction = 1.672370e-04, # tree params 
-  sample_size = tune(), 
-  mtry = tune(), # stochastic params 
-  learn_rate = 0.02078276 # learning rate param
-  ) %>% 
-  set_engine("xgboost") %>%
-  set_mode("regression") 
+# # Create model specification for tuning the tree parameters, using best learn rate
+# boost_spec_tune_2 <- boost_tree(
+#   trees = 3000, # ok to fix
+#   tree_depth = tune(), 
+#   min_n = tune(), 
+#   loss_reduction = tune(), # tree params 
+#   #sample_size = tune(), mtry = tune(), # stochastic params 
+#   learn_rate = 0.02078276 # learning rate param
+#   ) %>% 
+#   set_engine("xgboost") %>%
+#   set_mode("regression") 
+# 
+# 
+# # Grid specification
+# params_for_grid_2 <-
+#   dials::parameters(
+#     min_n(),
+#     tree_depth(),
+#     loss_reduction()
+# ) 
+# # Create grid
+# set.seed(123) # for reproducibility 
+# boost_grid_2 <- dials::grid_max_entropy(params_for_grid_2,
+#                         size = 100 # test 100 combinations 
+# ) 
+# 
+# # Create workflow
+# wf_boost_tune_2 <- workflow() %>%
+#   add_recipe(dic_rec) %>% # will automatically prep and bake
+#   add_model(boost_spec_tune_2) 
+# 
+# # Run the model
+# set.seed(123) # for reproducibility
+# doParallel::registerDoParallel()
+# tic("model run")
+# print("starting model tune 2...")
+# boost_rs_2 <- tune_grid(
+# wf_boost_tune_2,
+# DIC~., 
+# resamples = cv_folds,
+# grid = boost_grid_2,
+# metrics = metric_set(rmse)
+# )
+# 
+# print("...completing model tune 2")
+# toc()
+# 
+# # Collect metrics
+# boost_rs_df_2 <- boost_rs_2 %>%
+#   collect_metrics() %>%
+#   as.data.frame() %>%
+#   mutate(mean = as.numeric(mean)) %>%
+#   slice_min(mean, n = 5)
+# boost_rs_df_2
+# 
+# # 3 = min_n, 5 = tree_depth, 1.672370e-04 = loss_reduction
+```
 
-
-# Grid specification
-params_for_grid_3 <-
-  dials::parameters(
-    sample_size = sample_prop(),
-    finalize(mtry(), dic_train)
-) 
-# Create grid
-set.seed(123) # for reproducibility 
-boost_grid_3 <- dials::grid_max_entropy(params_for_grid_3,
-                        size = 300 # test 100 combinations 
-) 
-
-# Create workflow
-wf_boost_tune_3 <- workflow() %>%
-  add_recipe(dic_rec) %>% # will automatically prep and bake
-  add_model(boost_spec_tune_3) 
-
-# Run the model
-set.seed(123) # for reproducibility
-doParallel::registerDoParallel()
-tic("model run")
-print("starting model tune 3...")
-boost_rs_3 <- tune_grid(
-wf_boost_tune_3,
-DIC~., 
-resamples = cv_folds,
-grid = boost_grid_3,
-metrics = metric_set(rmse)
-)
-
-print("...completing model tune 3")
-toc()
-
-#saveRDS(boost_rs_3, "boost_stoch_specs.RDS")
-
-# Collect metrics
-boost_rs_df_3 <- boost_rs_3 %>%
-  collect_metrics() %>%
-  as.data.frame() %>%
-  mutate(mean = as.numeric(mean)) %>%
-  slice_min(mean, n = 5)
-boost_rs_df_3
-
-# 5.426082, mtry 7, sample size 0.5081524
+```{r}
+# # Create model specification for tuning stochastic params, using found tree params and learn rate from other specs
+# boost_spec_tune_3 <- boost_tree(
+#   trees = 3000, # ok to fix
+#   tree_depth = 5, 
+#   min_n = 3, 
+#   loss_reduction = 1.672370e-04, # tree params 
+#   sample_size = tune(), 
+#   mtry = tune(), # stochastic params 
+#   learn_rate = 0.02078276 # learning rate param
+#   ) %>% 
+#   set_engine("xgboost") %>%
+#   set_mode("regression") 
+# 
+# 
+# # Grid specification
+# params_for_grid_3 <-
+#   dials::parameters(
+#     sample_size = sample_prop(),
+#     finalize(mtry(), dic_train)
+# ) 
+# # Create grid
+# set.seed(123) # for reproducibility 
+# boost_grid_3 <- dials::grid_max_entropy(params_for_grid_3,
+#                         size = 300 # test 100 combinations 
+# ) 
+# 
+# # Create workflow
+# wf_boost_tune_3 <- workflow() %>%
+#   add_recipe(dic_rec) %>% # will automatically prep and bake
+#   add_model(boost_spec_tune_3) 
+# 
+# # Run the model
+# set.seed(123) # for reproducibility
+# doParallel::registerDoParallel()
+# tic("model run")
+# print("starting model tune 3...")
+# boost_rs_3 <- tune_grid(
+# wf_boost_tune_3,
+# DIC~., 
+# resamples = cv_folds,
+# grid = boost_grid_3,
+# metrics = metric_set(rmse)
+# )
+# 
+# print("...completing model tune 3")
+# toc()
+# 
+# # Collect metrics
+# boost_rs_df_3 <- boost_rs_3 %>%
+#   collect_metrics() %>%
+#   as.data.frame() %>%
+#   mutate(mean = as.numeric(mean)) %>%
+#   slice_min(mean, n = 5)
+# boost_rs_df_3
+# 
+# # 5.426082, mtry 7, sample size 0.5081524
 ```
 # CAN SKIP THE ABOVE - WAS FOR TUNING
 
 # BELOW THIS IS ABSOLUTELY NECESSARY TO RUN
 ```{r}
-# Create model specification
+# Create model specification tuning learn rate one last time after tuning all other params, then select best from this
 boost_spec_tune_4 <- boost_tree(
   trees = 3000, # ok to fix
   tree_depth = 5, 
@@ -290,8 +290,6 @@ metrics = metric_set(rmse)
 print("...completing model tune 4")
 toc()
 
-#saveRDS(boost_rs_4, "boost_stoch_specs.RDS")
-
 # Collect metrics
 boost_rs_df_4 <- boost_rs_4 %>%
   collect_metrics() %>%
@@ -301,22 +299,22 @@ boost_rs_df_4 <- boost_rs_4 %>%
 boost_rs_df_4
 ```
 ```{r}
+# Select best model from retuning learn rate
 xgb_final <- finalize_model(boost_spec_tune_4, select_best(boost_rs_4))
 
-set.seed(123)
 # Make a final fit of the model with the data
+set.seed(123) # for reproducibility
 train_fit <- xgb_final %>% fit(DIC ~ ., data = dic_train)
-train_fit
 ```
 ```{r}
+# Use final training fit to predict on test data
 test_eval_fit <- predict(train_fit, new_data = dic_test)
-test_eval_prob <- train_fit %>% 
-  predict_numeric.model_fit(new_data = dic_test)
 
-final_preds <- bind_cols(dic_test, test_eval_fit, test_eval_prob) %>% 
+# Assemble predictions
+final_preds <- bind_cols(dic_test, test_eval_fit) %>% 
   rename(DIC = .pred) %>%
   select(id, DIC)
 
-write.csv(final_preds, file = "submission.csv", row.names = FALSE)
+#write.csv(final_preds, file = "submission.csv", row.names = FALSE) # create prediction file
 ```
 
