@@ -302,14 +302,16 @@ test_eval_fit <- predict(train_fit, new_data = new_data)
 test_eval_prob <- train_fit %>% 
   predict_numeric.model_fit(new_data = new_data)
 
-proc_mw2 <- bind_cols(new_data, test_eval_fit, test_eval_prob)
+proc_mw2 <- bind_cols(new_data, test_eval_fit, test_eval_prob) %>% 
+  rename(test.id = id) %>% rename(DIC = .pred) %>%
+  select(test.id, DIC)
 
 # check the best iteration
 #proc_mw2 %>% metrics(`...19`, estimate = .pred)
 ```
 
 ```{r}
-# Now save the resulting predictions to a new csv file (uncomment the line below if you want to create the csv file)
+# Now save the resulting predictions to a new csv file (un-comment the line below if you want to create the csv file)
 #write.csv(proc_mw2, file = "submission.csv", row.names = FALSE)
 ```
 
