@@ -1,0 +1,320 @@
+---
+title: "erika_model"
+author: "Erika"
+date: "2023-03-18"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+For this quarter's final lab, you will be using the knowledge of machine learning that you have gained this quarter to training models to predict dissolved inorganic carbon in water samples collected by the California Cooperative Oceanic Fisheries Investigations program (CalCOFI).
+
+## Your Task:
+- Acquire domain knowledge. (Dr. Satterthwaite's presentation)
+- Explore the data.
+- Preprocessing.
+- Choose a model algorithm.
+- Tune relevant parameters (Cross validation).
+- Submit your prediction.
+
+```{r include=FALSE}
+library(caret) 
+library(tidymodels) 
+library(tidyverse)
+library(dplyr) 
+library(gbm)
+library(xgboost)
+library(ggpubr)
+library(tictoc)
+library(vip)
+library(tictoc)
+```
+
+
+## Read in the data: 
+
+This dataset was downloaded from the CalCOFI data portal. Bottle and cast data was downloaded and merged, then relevant variables were selected.
+
+You will use the data contained in the train.csv file to train a model that will predict dissolved inorganic carbon (DIC) content in the water samples.
+
+```{r}
+dic_train <- read_csv("train.csv") %>% 
+  select(-...13) %>% # remove column with all NAs
+  rename(TA1 = TA1.x) %>% # rename column to match test data column name
+  select(-id) # remove id column since it wouldn't add predictive value
+
+dic_test <- read_csv("test.csv")
+
+# don't need to split data since we already have a train and test set
+```
+
+Here's a short description of each variables: 
+
+NO2uM - Micromoles Nitrite per liter of seawater
+NO3uM - Micromoles Nitrate per liter of seawater
+NH3uM - Micromoles Ammonia per liter of seawater
+R_TEMP - Reported (Potential) Temperature in degrees Celsius
+R_Depth - Reported Depth (from pressure) in meters
+R_Sal - Reported Salinity (from Specific Volume Anomoly, M³/Kg)
+R_DYNHT - Reported Dynamic Height in units of dynamic meters (work per unit mass)
+R_Nuts - Reported Ammonium concentration
+R_Oxy_micromol.Kg - Reported Oxygen micromoles/kilogram
+PO4uM - Micromoles Phosphate per liter of seawater
+SiO3uM - Micromoles Silicate per liter of seawater
+TA1.x - Total Alkalinity micromoles per kilogram solution
+Salinity1 - Salinity
+Temperature_degC - Temp
+DIC - Outcome
+
+```{r}
+# Preprocess the training data
+dic_rec <- recipe(DIC ~ ., data = dic_train) %>%
+  step_normalize(all_numeric(), -all_outcomes())
+
+dic_rec_alt <- recipe(DIC ~ ., data = split_train) %>%
+  step_normalize(all_numeric(), -all_outcomes())
+
+# Set up cv folds
+set.seed(123)
+cv_folds <- dic_train %>% vfold_cv(v = 10)
+```
+
+# BOOSTED TREES
+
+```{r}
+# Create model specification
+boost_spec_tune_1 <- boost_tree(
+  trees = 3000, # ok to fix
+  #tree_depth = tune(), min_n = tune(), loss_reduction = tune(), # tree params 
+  #sample_size = tune(), mtry = tune(), # stochastic params 
+  learn_rate = tune() # learning rate param
+  ) %>% 
+  set_engine("xgboost") %>%
+  set_mode("regression") 
+
+
+# Create tune grid
+boost_grid_1 <- expand.grid(learn_rate = seq(0.0001, 0.3, length.out = 30))
+
+# Create workflow
+wf_boost_tune_1 <- workflow() %>%
+  add_recipe(dic_rec) %>% # will automatically prep and bake
+  add_model(boost_spec_tune_1) 
+
+# Run the model
+set.seed(123) # for reproducibility
+doParallel::registerDoParallel()
+tic("model run")
+print("starting model tune 1...")
+boost_rs_1 <- tune_grid(
+wf_boost_tune_1,
+DIC~., 
+resamples = cv_folds,
+grid = boost_grid_1,
+metrics = metric_set(rmse)
+)
+
+print("...completing model tune 1")
+toc()
+
+# Collect metrics
+boost_rs_df_1 <- boost_rs_1 %>%
+  collect_metrics() %>%
+  as.data.frame() %>%
+  mutate(mean = as.numeric(mean)) %>%
+  slice_min(mean, n = 5)
+boost_rs_df_1
+```
+```{r}
+# Create model specification
+boost_spec_tune_2 <- boost_tree(
+  trees = 3000, # ok to fix
+  tree_depth = tune(), 
+  min_n = tune(), 
+  loss_reduction = tune(), # tree params 
+  #sample_size = tune(), mtry = tune(), # stochastic params 
+  learn_rate = 0.02078276 # learning rate param
+  ) %>% 
+  set_engine("xgboost") %>%
+  set_mode("regression") 
+
+
+# Grid specification
+params_for_grid_2 <-
+  dials::parameters(
+    min_n(),
+    tree_depth(),
+    loss_reduction()
+) 
+# Create grid
+set.seed(123) # for reproducibility 
+boost_grid_2 <- dials::grid_max_entropy(params_for_grid_2,
+                        size = 100 # test 100 combinations 
+) 
+
+# Create workflow
+wf_boost_tune_2 <- workflow() %>%
+  add_recipe(dic_rec) %>% # will automatically prep and bake
+  add_model(boost_spec_tune_2) 
+
+# Run the model
+set.seed(123) # for reproducibility
+doParallel::registerDoParallel()
+tic("model run")
+print("starting model tune 2...")
+boost_rs_2 <- tune_grid(
+wf_boost_tune_2,
+DIC~., 
+resamples = cv_folds,
+grid = boost_grid_2,
+metrics = metric_set(rmse)
+)
+
+print("...completing model tune 2")
+toc()
+
+#saveRDS(boost_rs_2, "boost_tree_specs.RDS")
+
+# Collect metrics
+boost_rs_df_2 <- boost_rs_2 %>%
+  collect_metrics() %>%
+  as.data.frame() %>%
+  mutate(mean = as.numeric(mean)) %>%
+  slice_min(mean, n = 5)
+boost_rs_df_2
+
+# 3 = min_n, 5 = tree_depth, 1.672370e-04 = loss_reduction
+```
+
+```{r}
+# Create model specification
+boost_spec_tune_3 <- boost_tree(
+  trees = 3000, # ok to fix
+  tree_depth = 5, 
+  min_n = 3, 
+  loss_reduction = 1.672370e-04, # tree params 
+  sample_size = tune(), 
+  mtry = tune(), # stochastic params 
+  learn_rate = 0.02078276 # learning rate param
+  ) %>% 
+  set_engine("xgboost") %>%
+  set_mode("regression") 
+
+
+# Grid specification
+params_for_grid_3 <-
+  dials::parameters(
+    sample_size = sample_prop(),
+    finalize(mtry(), dic_train)
+) 
+# Create grid
+set.seed(123) # for reproducibility 
+boost_grid_3 <- dials::grid_max_entropy(params_for_grid_3,
+                        size = 300 # test 100 combinations 
+) 
+
+# Create workflow
+wf_boost_tune_3 <- workflow() %>%
+  add_recipe(dic_rec) %>% # will automatically prep and bake
+  add_model(boost_spec_tune_3) 
+
+# Run the model
+set.seed(123) # for reproducibility
+doParallel::registerDoParallel()
+tic("model run")
+print("starting model tune 3...")
+boost_rs_3 <- tune_grid(
+wf_boost_tune_3,
+DIC~., 
+resamples = cv_folds,
+grid = boost_grid_3,
+metrics = metric_set(rmse)
+)
+
+print("...completing model tune 3")
+toc()
+
+#saveRDS(boost_rs_3, "boost_stoch_specs.RDS")
+
+# Collect metrics
+boost_rs_df_3 <- boost_rs_3 %>%
+  collect_metrics() %>%
+  as.data.frame() %>%
+  mutate(mean = as.numeric(mean)) %>%
+  slice_min(mean, n = 5)
+boost_rs_df_3
+
+# 5.426082, mtry 7, sample size 0.5081524
+```
+
+```{r}
+# Create model specification
+boost_spec_tune_4 <- boost_tree(
+  trees = 3000, # ok to fix
+  tree_depth = 5, 
+  min_n = 3, 
+  loss_reduction = 1.672370e-04, # tree params 
+  sample_size = 0.5081524, 
+  mtry = 7, # stochastic params 
+  learn_rate = tune() # learning rate param
+  ) %>% 
+  set_engine("xgboost") %>%
+  set_mode("regression") 
+
+
+# Create tune grid
+boost_grid_4 <- expand.grid(learn_rate = seq(0.0001, 0.3, length.out = 30))
+
+# Create workflow
+wf_boost_tune_4 <- workflow() %>%
+  add_recipe(dic_rec) %>% # will automatically prep and bake
+  add_model(boost_spec_tune_4) 
+
+# Run the model
+set.seed(123) # for reproducibility
+doParallel::registerDoParallel()
+tic("model run")
+print("starting model tune 4...")
+boost_rs_4 <- tune_grid(
+wf_boost_tune_4,
+DIC~., 
+resamples = cv_folds,
+grid = boost_grid_4,
+metrics = metric_set(rmse)
+)
+
+print("...completing model tune 4")
+toc()
+
+#saveRDS(boost_rs_4, "boost_stoch_specs.RDS")
+
+# Collect metrics
+boost_rs_df_4 <- boost_rs_4 %>%
+  collect_metrics() %>%
+  as.data.frame() %>%
+  mutate(mean = as.numeric(mean)) %>%
+  slice_min(mean, n = 5)
+boost_rs_df_4
+```
+```{r}
+xgb_final <- finalize_model(boost_spec_tune_4, select_best(boost_rs_4))
+
+set.seed(123)
+# Make a final fit of the model with the data
+train_fit <- xgb_final %>% fit(DIC ~ ., data = dic_train)
+train_fit
+```
+```{r}
+test_eval_fit <- predict(train_fit, new_data = dic_test)
+test_eval_prob <- train_fit %>% 
+  predict_numeric.model_fit(new_data = dic_test)
+
+final_preds <- bind_cols(dic_test, test_eval_fit, test_eval_prob) %>% 
+  rename(DIC = .pred) %>%
+  select(id, DIC)
+
+write.csv(final_preds, file = "submission.csv", row.names = FALSE)
+```
+
