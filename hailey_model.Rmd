@@ -286,20 +286,31 @@ train_fit
 ```{r}
 set.seed(31923)
 # First, load and prep the new data
-new_data <- read_csv("test.csv") %>% mutate(DIC = as.numeric(NA))
+new_data <- read_csv("test.csv") %>% rename(TA1.x = TA1) #%>% mutate(DIC = as.numeric(NA))
 
-rec_new <- recipe(DIC ~ ., data = new_data) %>% 
-  step_dummy(all_nominal(), -all_outcomes(), one_hot = TRUE) %>% 
-  step_normalize(all_numeric(), -all_outcomes())
+#rec_new <- recipe(DIC ~ ., data = new_data) %>% 
+#  step_dummy(all_nominal(), -all_outcomes(), one_hot = TRUE) %>% 
+#  step_normalize(all_numeric(), -all_outcomes())
 
-bake_new <- rec_new %>% prep() %>% bake(., new_data)
+#bake_new <- rec_new %>% prep() %>% bake(., new_data)
 ```
 
 ```{r}
+set.seed(31923)
 # Now I can fit my model to the new data:
-test_eval_fit <- xgb_final %>% fit(DIC ~ ., data = bake_new)
-test_eval_fit
+test_eval_fit <- predict(train_fit, new_data = new_data)
+test_eval_prob <- train_fit %>% 
+  predict_numeric.model_fit(new_data = new_data)
+
+proc_mw2 <- bind_cols(new_data, test_eval_fit, test_eval_prob)
+
+# check the best iteration
+#proc_mw2 %>% metrics(`...19`, estimate = .pred)
 ```
 
+```{r}
+# Now save the resulting predictions to a new csv file (uncomment the line below if you want to create the csv file)
+#write.csv(proc_mw2, file = "submission.csv", row.names = FALSE)
+```
 
 
