@@ -70,6 +70,29 @@ Temperature_degC - Temp
 DIC - Outcome
 
 ```{r}
+# Lets look at the data:
+# Here are the variable correlations
+corr <- Hmisc::rcorr(as.matrix(dic_train))
+corr$r
+
+# According to the correlations, it looks like most of the variables are highly correlated with DIC, so let's plot a few of the most correlated ones and compare them to the least correlated variables.
+# First is how PO4uM (Phosphate concentration) is strongly positively correlated with DIC:
+ggplot(dic_train, aes(x = PO4uM, y = DIC)) + 
+  geom_point()
+
+# This is how the reported oxygen concentrations affects DIC:
+ggplot(dic_train, aes(x = R_Oxy_micromol.Kg, y = DIC)) + 
+  geom_point()
+
+# Latitude and longitude are relatively uncorrelated with DIC, so lets look at another uncorrelated variable: NO2 Concentrations
+ggplot(dic_train, aes(x = NO2uM, y = DIC)) + 
+  geom_point()
+
+# Overall, it seems like it is safe to keep all the variables for training this model.
+```
+
+
+```{r}
 # Preprocess the training data
 dic_rec <- recipe(DIC ~ ., data = dic_train) %>%
   step_normalize(all_numeric(), -all_outcomes())
